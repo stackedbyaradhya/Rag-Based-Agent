@@ -1,0 +1,35 @@
+from typing import Any
+
+import httpx
+
+from app.core.config import settings
+
+
+class LLMService:
+    def __init__(self) -> None:
+        self.base_url = settings.openrouter_base_url.rstrip("/")
+        self.api_key = settings.openrouter_api_key
+        self.model = settings.llm_model
+
+    async def answer(self, question: str, context: str) -> str:
+        if not self.api_key:
+            return "I cannot answer confidently without connected LLM credentials."
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a strict enterprise knowledge assistant. "
+                    "Answer only using provided context. Refuse if insufficient."
+                ),
+            },
+            {"role": "user", "content": f"Question: {question}\n\nContext:\n{context}"},
+        ]
+
+        payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.1}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
+            response.raise_for_status()
+            body = response.json()
+            return body["choices"][0]["message"]["content"]

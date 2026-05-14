@@ -1,0 +1,4 @@
+Acme Leave Policy:
+Employees receive 24 paid leaves annually.
+Carry-forward limit is 10 days.
+Sick leave requires manager approval after 2 consecutive days.

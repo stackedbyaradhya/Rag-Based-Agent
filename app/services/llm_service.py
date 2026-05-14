@@ -29,7 +29,35 @@ class LLMService:
         payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.1}
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
-            response.raise_for_status()
-            body = response.json()
-            return body["choices"][0]["message"]["content"]
+            try:
+                response = await client.post(f"{self.base_url}/chat/completions", json=payload, headers=headers)
+                response.raise_for_status()
+                body = response.json()
+                return body["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as exc:
+                details = _extract_error_details(exc.response)
+                return (
+                    "I could not generate an answer from the LLM provider right now. "
+                    f"Provider error ({exc.response.status_code}): {details}"
+                )
+            except Exception:
+                return "I could not generate an answer due to an unexpected LLM service error."
+
+
+def _extract_error_details(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except Exception:  # noqa: BLE001
+        text = (response.text or "").strip()
+        return text[:300] if text else "Unknown upstream error."
+
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            message = err.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+        message = body.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return str(body)[:300]

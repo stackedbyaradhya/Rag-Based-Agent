@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.db.session import SessionLocal, get_db
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
@@ -28,9 +29,19 @@ async def process_document_chunks(document_id: int, file_path: str) -> None:
         embedding_service = EmbeddingService()
         for idx, chunk in enumerate(chunks):
             embedding = await embedding_service.embed(chunk)
+            if len(embedding) != settings.embedding_dimensions:
+                raise ValueError(
+                    f"Embedding dimension mismatch: expected {settings.embedding_dimensions}, got {len(embedding)}"
+                )
             db.add(DocumentChunk(document_id=document_id, chunk_index=idx, content=chunk, embedding=embedding))
         document.status = "indexed"
         db.commit()
+    except Exception:
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            document.status = "failed"
+            db.commit()
+        raise
     finally:
         db.close()
 
